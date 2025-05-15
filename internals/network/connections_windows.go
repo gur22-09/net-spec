@@ -2,13 +2,22 @@ package network
 
 import (
 	"log"
+	"os"
+	"os/signal"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 type tcpTableClass int32
+
+type ProcessInfo struct {
+	Name    string
+	PID     uint32
+	ExePath string
+}
 
 type Connection struct {
 	LocalAddress  string
@@ -111,18 +120,30 @@ func (n *NetworkHandler) getTCPConnections() ([]Connection, error) {
 }
 
 func (n *NetworkHandler) SetupNetworkListener() error {
-	connections, err := n.getTCPConnections()
 
-	if err != nil {
-		n.logger.Println("failed to get tcp connections")
-		return err
+	ticker := time.NewTicker(2 * time.Second)
+
+	defer ticker.Stop()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-ticker.C:
+			connections, err := n.getTCPConnections()
+
+			if err != nil {
+				n.logger.Println("failed to get tcp connections")
+				return err
+			}
+
+			printActiveConnections(connections, n.logger)
+
+		case <-stop:
+			n.logger.Println("Exiting...")
+			os.Exit(0)
+		}
 	}
 
-	for _, conn := range connections {
-		n.logger.Printf("Local Address %s, Local Port %d -> Remote Address %s: Remote Port %d, Connection State %s, PID=%d with Process %s\n",
-			conn.LocalAddress, conn.LocalPort, conn.RemoteAddress, conn.RemotePort, conn.State, conn.PID, conn.Process,
-		)
-	}
-
-	return nil
 }

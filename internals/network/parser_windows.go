@@ -1,13 +1,16 @@
 package network
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
+	"path/filepath"
+	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/gur22-09/net-spec/internals/utils"
+	"golang.org/x/sys/windows"
 )
 
 type MIB_TCPROW_OWNER_PID struct {
@@ -22,58 +25,6 @@ type MIB_TCPROW_OWNER_PID struct {
 type MIB_TCPTABLE_OWNER_PID struct {
 	NumEntries uint32
 	Table      []MIB_TCPROW_OWNER_PID
-}
-
-func ParseTCPv4ConnectionsV2(buffer *[]byte) ([]Connection, error) {
-	if len(*buffer) < 4 {
-		return nil, errors.New("insufficient buffer size")
-	}
-
-	count := binary.LittleEndian.Uint32((*buffer)[:4])
-	connections := make([]Connection, 0, count)
-
-	// Correct entry size - should be 24 bytes for MIB_TCPROW_OWNER_PID
-	const entrySize = 24
-
-	// Verify buffer has enough data
-	requiredSize := 4 + int(count)*entrySize
-	if len(*buffer) < requiredSize {
-		return nil, errors.New("buffer too small for claimed entry count")
-	}
-
-	// Slice the buffer to just the table data
-	tableData := (*buffer)[4:requiredSize]
-
-	for i := 0; i < int(count); i++ {
-		offset := i * entrySize
-		if offset+entrySize > len(tableData) {
-			break // prevent out-of-bounds
-		}
-
-		rowData := tableData[offset : offset+entrySize]
-
-		// Parse using binary.Read for stability
-		var row MIB_TCPROW_OWNER_PID
-		buf := bytes.NewReader(rowData)
-		err := binary.Read(buf, binary.LittleEndian, &row)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse row %d: %v", i, err)
-		}
-
-		connection := Connection{
-			LocalAddress:  utils.IpFromUint32(row.LocalAddr),
-			LocalPort:     utils.PortFromDWORD(row.LocalPort),
-			RemoteAddress: utils.IpFromUint32(row.RemoteAddr),
-			RemotePort:    utils.PortFromDWORD(row.RemotePort),
-			State:         utils.TcpStateToStr(row.State),
-			PID:           row.OwningPid,
-			Process:       utils.ResolvePID(row.OwningPid),
-		}
-
-		connections = append(connections, connection)
-	}
-
-	return connections, nil
 }
 
 func ParseTCPv4Connections(buffer *[]byte) ([]Connection, error) {
@@ -112,4 +63,49 @@ func ParseTCPv4Connections(buffer *[]byte) ([]Connection, error) {
 	}
 
 	return connections, nil
+}
+
+func GetProcessInfo(pid uint32) (ProcessInfo, error) {
+	var info ProcessInfo
+	info.PID = pid
+
+	// Open process handle
+	h, err := windows.OpenProcess(
+		windows.PROCESS_QUERY_LIMITED_INFORMATION,
+		false,
+		pid,
+	)
+	if err != nil {
+		return info, fmt.Errorf("OpenProcess failed: %v", err)
+	}
+	defer windows.CloseHandle(h)
+
+	// Get executable path
+	exePath := make([]uint16, windows.MAX_PATH)
+	size := uint32(windows.MAX_PATH)
+	err = windows.QueryFullProcessImageName(h, 0, &exePath[0], &size)
+	if err != nil {
+		return info, err
+	}
+
+	info.ExePath = syscall.UTF16ToString(exePath)
+	info.Name = filepath.Base(info.ExePath)
+
+	return info, nil
+}
+
+func printActiveConnections(connections []Connection, logger *log.Logger) {
+	utils.ClearScreen(logger)
+
+	fmt.Printf("Active TCP Connections [%d] @ %s\n", len(connections), time.Now().Format("15:04:05"))
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf("%-21s %-6s  %-21s %-6s  %-12s  %s\n",
+		"Local Address", "Local Port", "Remote Address", "RemotePort", "State", "Process")
+
+	for _, c := range connections {
+		fmt.Printf("%-21s %-6d  %-21s %-6d  %-12s  %s\n",
+			c.LocalAddress, c.LocalPort,
+			c.RemoteAddress, c.RemotePort,
+			c.State, c.Process)
+	}
 }

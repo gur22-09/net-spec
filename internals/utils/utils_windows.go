@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 	"unsafe"
 
@@ -69,4 +70,8 @@ func ResolvePID(pid uint32) string {
 		return ""
 	}
 	return windows.UTF16ToString(buf[:])
+}
+
+func ClearScreen(logger *log.Logger) {
+	logger.Print("\033[H\033[2J")
 }
