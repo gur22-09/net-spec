@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gur22-09/net-spec/internals/constants"
 	"github.com/gur22-09/net-spec/internals/utils"
 	"golang.org/x/sys/windows"
 )
@@ -57,6 +58,7 @@ func ParseTCPv4Connections(buffer *[]byte) ([]Connection, error) {
 			State:         utils.TcpStateToStr(row.State),
 			PID:           row.OwningPid,
 			Process:       utils.ResolvePID(row.OwningPid),
+			Protocol:      constants.ProtocolTCP,
 		}
 
 		connections = append(connections, connection)

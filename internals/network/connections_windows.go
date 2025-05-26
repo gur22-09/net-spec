@@ -27,6 +27,7 @@ type Connection struct {
 	State         string
 	PID           uint32
 	Process       string
+	Protocol      string
 }
 
 type NetworkHandler struct {
@@ -115,6 +116,20 @@ func (n *NetworkHandler) getTCPConnections() ([]Connection, error) {
 	connections = append(connections, v4Conns...)
 
 	// TODO - add ipv6 connections
+
+	return connections, nil
+}
+
+func (n *NetworkHandler) GetAllConnections() ([]Connection, error) {
+	var connections []Connection
+
+	tcp, err := n.getTCPConnections()
+
+	if err != nil {
+		return connections, err
+	}
+
+	connections = append(connections, tcp...)
 
 	return connections, nil
 }
