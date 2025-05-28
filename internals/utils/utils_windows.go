@@ -2,9 +2,9 @@ package utils
 
 import (
 	"encoding/binary"
-	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -25,7 +25,6 @@ func PortFromDWORD(dword uint32) uint16 {
 }
 
 func TcpStateToStr(state uint32) string {
-	fmt.Println("parsing tcp state", state)
 	switch state {
 	case 1:
 		return "CLOSED"
@@ -74,4 +73,13 @@ func ResolvePID(pid uint32) string {
 
 func ClearScreen(logger *log.Logger) {
 	logger.Print("\033[H\033[2J")
+}
+
+func IpFrom16Bytes(addr [16]byte, scopeId uint32) string {
+	ip := net.IP(addr[:])
+
+	if ip.IsLinkLocalUnicast() {
+		return ip.String() + "%" + strconv.Itoa(int(scopeId))
+	}
+	return ip.String()
 }

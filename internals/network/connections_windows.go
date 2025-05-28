@@ -2,10 +2,7 @@ package network
 
 import (
 	"log"
-	"os"
-	"os/signal"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -109,13 +106,26 @@ func (n *NetworkHandler) getTCPConnections() ([]Connection, error) {
 	v4Conns, err := ParseTCPv4Connections(ipv4Buf)
 
 	if err != nil {
-		n.logger.Printf("failed to get tcp connections: %v", err)
+		n.logger.Printf("failed to get ipv4 connections: %v\n", err)
 		return nil, err
 	}
 
 	connections = append(connections, v4Conns...)
 
-	// TODO - add ipv6 connections
+	ipv6Buf, err := n.fetchTCPTables(syscall.AF_INET6, TCP_TABLE_OWNER_PID_ALL, true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	v6Conns, err := ParseTCPv6Connections(ipv6Buf)
+
+	if err != nil {
+		n.logger.Printf("failed to get ipv6 connections: %v\n", err)
+		return nil, err
+	}
+
+	connections = append(connections, v6Conns...)
 
 	return connections, nil
 }
@@ -132,33 +142,4 @@ func (n *NetworkHandler) GetAllConnections() ([]Connection, error) {
 	connections = append(connections, tcp...)
 
 	return connections, nil
-}
-
-func (n *NetworkHandler) SetupNetworkListener() error {
-
-	ticker := time.NewTicker(2 * time.Second)
-
-	defer ticker.Stop()
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	for {
-		select {
-		case <-ticker.C:
-			connections, err := n.getTCPConnections()
-
-			if err != nil {
-				n.logger.Println("failed to get tcp connections")
-				return err
-			}
-
-			printActiveConnections(connections, n.logger)
-
-		case <-stop:
-			n.logger.Println("Exiting...")
-			os.Exit(0)
-		}
-	}
-
 }

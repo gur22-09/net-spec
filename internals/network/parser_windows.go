@@ -3,10 +3,8 @@ package network
 import (
 	"errors"
 	"fmt"
-	"log"
 	"path/filepath"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/gur22-09/net-spec/internals/constants"
@@ -23,15 +21,64 @@ type MIB_TCPROW_OWNER_PID struct {
 	OwningPid  uint32
 }
 
-type MIB_TCPTABLE_OWNER_PID struct {
-	NumEntries uint32
-	Table      []MIB_TCPROW_OWNER_PID
+type MIB_TP6ROW_OWNER_PID struct {
+	LocalAddr     [16]byte
+	LocalScopeId  uint32
+	LocalPort     uint32
+	RemoteAddr    [16]byte
+	RemoteScopeId uint32
+	RemotePort    uint32
+	State         uint32
+	OwningPid     uint32
+}
+
+func ParseTCPv6Connections(buffer *[]byte) ([]Connection, error) {
+	buff := *buffer
+	if len(buff) < 4 {
+		return nil, errors.New("insufficient buffer size")
+	}
+
+	count := *(*uint32)(unsafe.Pointer(&buff[0]))
+
+	fmt.Println("number of ipv6 connections", count)
+
+	connections := make([]Connection, 0, count)
+
+	entrySize := int(unsafe.Sizeof(MIB_TP6ROW_OWNER_PID{}))
+
+	base := unsafe.Pointer(&buff[4])
+
+	for i := 0; i < int(count); i++ {
+		entryPtr := uintptr(base) + uintptr(i*entrySize)
+
+		row := (*MIB_TP6ROW_OWNER_PID)(unsafe.Pointer(entryPtr))
+
+		if len(buff) < 4+(int(count)*entrySize) {
+			return nil, errors.New("buffer too small for expected entry count")
+		}
+
+		connection := Connection{
+			LocalAddress:  utils.IpFrom16Bytes(row.LocalAddr, row.LocalScopeId),
+			LocalPort:     utils.PortFromDWORD(row.LocalPort),
+			RemoteAddress: utils.IpFrom16Bytes(row.RemoteAddr, row.RemoteScopeId),
+			RemotePort:    utils.PortFromDWORD(row.RemotePort),
+			State:         utils.TcpStateToStr(row.State),
+			PID:           row.OwningPid,
+			Process:       utils.ResolvePID(row.OwningPid),
+			Protocol:      constants.ProtocolTCP,
+		}
+
+		connections = append(connections, connection)
+
+	}
+
+	return connections, nil
 }
 
 func ParseTCPv4Connections(buffer *[]byte) ([]Connection, error) {
 	buff := *buffer
 	if len(buff) < 4 {
-		return nil, errors.New("Insufficient buffer size")
+		return nil, errors.New("insufficient buffer size")
 	}
 
 	count := *(*uint32)(unsafe.Pointer(&buff[0]))
@@ -94,20 +141,4 @@ func GetProcessInfo(pid uint32) (ProcessInfo, error) {
 	info.Name = filepath.Base(info.ExePath)
 
 	return info, nil
-}
-
-func printActiveConnections(connections []Connection, logger *log.Logger) {
-	utils.ClearScreen(logger)
-
-	fmt.Printf("Active TCP Connections [%d] @ %s\n", len(connections), time.Now().Format("15:04:05"))
-	fmt.Println("--------------------------------------------------------------------------------")
-	fmt.Printf("%-21s %-6s  %-21s %-6s  %-12s  %s\n",
-		"Local Address", "Local Port", "Remote Address", "RemotePort", "State", "Process")
-
-	for _, c := range connections {
-		fmt.Printf("%-21s %-6d  %-21s %-6d  %-12s  %s\n",
-			c.LocalAddress, c.LocalPort,
-			c.RemoteAddress, c.RemotePort,
-			c.State, c.Process)
-	}
 }

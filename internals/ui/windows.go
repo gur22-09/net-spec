@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/widget"
@@ -15,9 +16,9 @@ type MainWindow struct {
 
 func NewMainWindow(app fyne.App, connections []network.Connection) *MainWindow {
 	window := app.NewWindow(constants.AppName)
-	window.Resize(fyne.NewSize(800, 600))
-	numOfClomuns := 6
-	// Create the table widget
+	window.Resize(fyne.NewSize(1440, 900))
+	numOfClomuns := 9
+
 	table := widget.NewTable(
 		func() (int, int) {
 			return len(connections) + 1, numOfClomuns // +1 for extra header row
@@ -35,12 +36,18 @@ func NewMainWindow(app fyne.App, connections []network.Connection) *MainWindow {
 				case 1:
 					label.SetText("PID")
 				case 2:
-					label.SetText("Local Address")
+					label.SetText("Process")
 				case 3:
-					label.SetText("Remote Address")
+					label.SetText("Local Address")
 				case 4:
-					label.SetText("State")
+					label.SetText("Local Port")
 				case 5:
+					label.SetText("Remote Address")
+				case 6:
+					label.SetText("Remote Port")
+				case 7:
+					label.SetText("State")
+				case 8:
 					label.SetText("Duration")
 				}
 				label.TextStyle = fyne.TextStyle{Bold: true}
@@ -57,12 +64,18 @@ func NewMainWindow(app fyne.App, connections []network.Connection) *MainWindow {
 			case 1:
 				label.SetText(fmt.Sprintf("%d", conn.PID))
 			case 2:
-				label.SetText(conn.LocalAddress)
+				label.SetText(filepath.Base(conn.Process))
 			case 3:
-				label.SetText(conn.RemoteAddress)
+				label.SetText(conn.LocalAddress)
 			case 4:
-				label.SetText(conn.State)
+				label.SetText(fmt.Sprintf("%d", conn.LocalPort))
 			case 5:
+				label.SetText(conn.RemoteAddress)
+			case 6:
+				label.SetText(fmt.Sprintf("%d", conn.RemotePort))
+			case 7:
+				label.SetText(conn.State)
+			case 8:
 				label.SetText("TODO") // TODO - add duration after snapshot logic
 			}
 		},
@@ -71,10 +84,13 @@ func NewMainWindow(app fyne.App, connections []network.Connection) *MainWindow {
 	// Set column widths
 	table.SetColumnWidth(0, 60)
 	table.SetColumnWidth(1, 60)
-	table.SetColumnWidth(2, 200)
-	table.SetColumnWidth(3, 200)
+	table.SetColumnWidth(2, 300)
+	table.SetColumnWidth(3, 400)
 	table.SetColumnWidth(4, 100)
-	table.SetColumnWidth(5, 100)
+	table.SetColumnWidth(5, 400)
+	table.SetColumnWidth(6, 100)
+	table.SetColumnWidth(7, 120)
+	table.SetColumnWidth(8, 60)
 
 	window.SetContent(table)
 	window.CenterOnScreen()
